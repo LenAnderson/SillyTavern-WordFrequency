@@ -1,0 +1,34 @@
+body #stwf--root {
+	position: absolute;
+	bottom: 0;
+	right: 0;
+	top: 0;
+	max-height: unset;
+	max-width: unset;
+	width: calc((100vw - var(--sheldWidth)) / 2);
+	transition: calc(1ms * var(--stcdx--transitionTime));
+	background-color: var(--SmartThemeBlurTintColor);
+	display: flex;
+	flex-direction: column;
+
+	> .stwf--chart {
+		flex: 0 0 auto;
+		background-color: whitesmoke;
+	}
+
+	> .stwf--list {
+		flex: 1 1 auto;
+		overflow: auto;
+		> .stwf--item {
+			opacity: 0.5;
+			transition: 200ms;
+			cursor: pointer;
+			&.stwf--selected {
+				color: var(--SmartThemeQuoteColor);
+			}
+			&:hover {
+				opacity: 1;
+			}
+		}
+	}
+}
