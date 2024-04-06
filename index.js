@@ -8,6 +8,7 @@ Chart.register(...registerables);
 
 let isActive = false;
 let consecutive = extension_settings.wordFrequency?.consecutive ?? [1,2,3];
+let movingAverage = extension_settings.wordFrequency?.movingAverage ?? 10;
 /**@type {HTMLElement} */
 let dom;
 let domChartContainer;
@@ -114,48 +115,59 @@ const render = (words)=>{
                     selected.push(word.word);
                     item.classList.add('stwf--selected');
                 }
-                domChartContainer.innerHTML = '';
-                if (selected.length > 0) {
-                    const canvas = document.createElement('canvas');
-                    canvas.classList.add('stwf--chartCanvas');
-                    domChartContainer.append(canvas);
-                    const dataSets = [];
-                    for (const word of selected) {
-                        const data = [];
-                        let cum = 0;
-                        chat.forEach((mes,idx)=>{
-                            const count = mes.mes.toLowerCase().split(word).length - 1;
-                            cum += count;
-                            data.push(cum / (idx + 1));
-                        });
-                        dataSets.push({
-                            label: word,
-                            data,
-                            fill: false,
-                            borderColor: colors[dataSets.length % colors.length],
-                        });
-                    }
-                    const chart = new Chart(canvas, {
-                        type: 'line',
-                        data: {
-                            labels: chat.map((it,idx)=>idx),
-                            datasets: dataSets,
-                        },
-                        options: {
-                            scales: {
-                                x: {
-                                    text: 'Message #',
-                                },
-                                y: {
-                                    text: 'Frequency per message',
-                                },
-                            },
-                        },
-                    });
-                }
+                updateChart();
             });
             domList.append(item);
         }
+    }
+};
+const updateChart = ()=>{
+    domChartContainer.innerHTML = '';
+    if (selected.length > 0) {
+        const canvas = document.createElement('canvas');
+        canvas.classList.add('stwf--chartCanvas');
+        domChartContainer.append(canvas);
+        const dataSets = [];
+        for (const word of selected) {
+            const data = [];
+            // let cum = 0;
+            for (let idx = movingAverage; idx < chat.length; idx++) {
+                // const mes = chat[idx];
+                const cum = chat
+                    .slice(movingAverage ? idx - movingAverage : 0, idx)
+                    .map(it=>it.mes.toLowerCase().split(word).length - 1)
+                    .reduce((sum,cur)=>sum + cur,0)
+                ;
+                // const count = mes.mes.toLowerCase().split(word).length - 1;
+                // cum += count;
+                data.push(cum / (movingAverage || idx));
+            }
+            chat.forEach((mes,idx)=>{
+            });
+            dataSets.push({
+                label: word,
+                data,
+                fill: false,
+                borderColor: colors[dataSets.length % colors.length],
+            });
+        }
+        const chart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: chat.map((it,idx)=>idx).filter(it=>it >= movingAverage),
+                datasets: dataSets,
+            },
+            options: {
+                scales: {
+                    x: {
+                        text: 'Message #',
+                    },
+                    y: {
+                        text: 'Frequency per message',
+                    },
+                },
+            },
+        });
     }
 };
 const update = ()=>{
@@ -168,6 +180,7 @@ const update = ()=>{
     const allWords = getWords();
     const words = processWords(allWords);
     render(words);
+    updateChart();
 };
 
 // show();
@@ -201,6 +214,23 @@ registerSlashCommand('wordfrequency-consecutive',
     },
     [],
     '<span class="monospace">(listOfNumbers)</span> – Set number of consecutive words to check. Example: <code>/wordfrequency-consecutive [1,2,3]</code> to check individual words as well as one-word and two-word sequences.',
+    true,
+    true,
+);
+registerSlashCommand('wordfrequency-movingaverage',
+    (args, value)=>{
+        if (value?.trim()) {
+            if (!extension_settings.wordFrequency) extension_settings.wordFrequency = {};
+            extension_settings.wordFrequency.movingAverage = Number(value.trim());
+            movingAverage = extension_settings.wordFrequency.movingAverage;
+            saveSettingsDebounced();
+            updateChart();
+        } else {
+            return JSON.stringify(movingAverage);
+        }
+    },
+    [],
+    '<span class="monospace">(listOfNumbers)</span> – Set range of the moving average for the frequency chart. Set to <code>0</code> to disable moving average. Call without value to return the current setting.',
     true,
     true,
 );
