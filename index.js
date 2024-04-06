@@ -256,3 +256,20 @@ registerSlashCommand('wordfrequency-common',
     true,
     true,
 );
+
+registerSlashCommand('wordfrequency-select',
+    (args, value)=>{
+        if (selected.includes(value)) {
+            selected.splice(selected.indexOf(value), 1);
+            Array.from(document.querySelectorAll('.stwf--item')).find(it=>it.textContent.replace(/ \(\d+\)$/,'') == value)?.classList?.remove('stwf--selected');
+        } else {
+            selected.push(value);
+            Array.from(document.querySelectorAll('.stwf--item')).find(it=>it.textContent.replace(/ \(\d+\)$/,'') == value)?.classList?.add('stwf--selected');
+        }
+        updateChart();
+    },
+    [],
+    '<span class="monospace">(word)</span> – Add / remove a word or sequence from the chart.',
+    true,
+    true,
+);
