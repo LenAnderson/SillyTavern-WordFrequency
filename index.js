@@ -1,5 +1,6 @@
 import { chat, chat_metadata, eventSource, event_types, getCurrentChatId, saveSettingsDebounced } from '../../../../script.js';
 import { extension_settings, saveMetadataDebounced } from '../../../extensions.js';
+import { POPUP_TYPE, Popup } from '../../../popup.js';
 import { registerSlashCommand } from '../../../slash-commands.js';
 import { isTrueBoolean } from '../../../utils.js';
 import { Chart, registerables } from './lib/chartjs/chart.esm.js';
@@ -9,12 +10,17 @@ Chart.register(...registerables);
 let isActive = false;
 let consecutive = extension_settings.wordFrequency?.consecutive ?? [1,2,3];
 let movingAverage = extension_settings.wordFrequency?.movingAverage ?? 10;
+let movingAverageInput;
+let frequencyPerWords = extension_settings.wordFrequency?.frequencyPerWords ?? 10;
+let frequencyPerWordsInput;
 /**@type {HTMLElement} */
 let dom;
 let domChartContainer;
 let domList;
 let allWords;
 let words;
+/**@type {{id:number, text:string, words:string[]}[]} */
+let allMessages;
 const colors = [
     'silver',
     'red',
@@ -32,6 +38,75 @@ const show = ()=>{
     dom = document.createElement('div'); {
         dom.id = 'stwf--root';
         dom.classList.add('draggable');
+        const actions = document.createElement('div'); {
+            actions.classList.add('stwf--actions');
+            const controls = document.createElement('div'); {
+                controls.classList.add('stwf--controls');
+                const ma = document.createElement('label'); {
+                    ma.append('Moving Average: ');
+                    const inp = document.createElement('input'); {
+                        movingAverageInput = inp;
+                        inp.classList.add('text_pole');
+                        inp.type = 'number';
+                        inp.value = movingAverage;
+                        inp.addEventListener('change', ()=>setMovingAverage(inp.value));
+                        ma.append(inp);
+                    }
+                    controls.append(ma);
+                }
+                const perWords = document.createElement('label'); {
+                    const inp = document.createElement('input'); {
+                        frequencyPerWordsInput = inp;
+                        inp.type = 'checkbox';
+                        inp.checked = frequencyPerWords;
+                        inp.addEventListener('click', ()=>setFrequencyPerWords(inp.checked));
+                        perWords.append(inp);
+                    }
+                    perWords.append('Freq. per words');
+                    controls.append(perWords);
+                }
+                const commonBtn = document.createElement('div'); {
+                    commonBtn.classList.add('menu_button');
+                    commonBtn.classList.add('fa-solid', 'fa-book');
+                    commonBtn.title = 'Common Words / Excluded Words';
+                    commonBtn.addEventListener('click', ()=>{
+                        const list = document.createElement('ul'); {
+                            list.classList.add('stwf--common');
+                            for (const word of (chat_metadata.wordFrequency?.common ?? [])) {
+                                const li = document.createElement('li'); {
+                                    li.classList.add('stwf--item');
+                                    li.textContent = word;
+                                    li.title = 'Click to remove';
+                                    li.addEventListener('click', ()=>{
+                                        if (chat_metadata.wordFrequency.common.includes(word)) {
+                                            chat_metadata.wordFrequency.common.splice(chat_metadata.wordFrequency.common.indexOf(word), 1);
+                                            li.remove();
+                                            saveMetadataDebounced();
+                                            update();
+                                        }
+                                    });
+                                    list.append(li);
+                                }
+                            }
+                        }
+                        const dlg = new Popup(list, POPUP_TYPE.TEXT, null, { okButton:'Close' });
+                        dlg.show();
+                    });
+                    controls.append(commonBtn);
+                }
+                actions.append(controls);
+            }
+            const close = document.createElement('div'); {
+                close.classList.add('stwf--close');
+                close.classList.add('stwf--action');
+                close.classList.add('fa-solid');
+                close.classList.add('fa-circle-xmark');
+                close.title = 'Close';
+                close.addEventListener('click', ()=>hide());
+                actions.append(close);
+            }
+            dom.append(actions);
+        }
         const chartContainer = document.createElement('div'); {
             domChartContainer = chartContainer;
             chartContainer.classList.add('stwf--chart');
@@ -52,25 +127,40 @@ const hide = ()=>{
     dom?.remove();
 };
 const getWords = ()=>{
-    const allText = chat.map(it=>it.mes.split('```').filter((_,idx)=>idx % 2 == 0).join('')).join('\n');
+    allWords = [];
     const sentenceSegmenter = new Intl.Segmenter('en', { granularity:'sentence' });
     const wordSegmenter = new Intl.Segmenter('en', { granularity:'word' });
-    const allSentences = Array.from(sentenceSegmenter.segment(allText)).map(it=>it.segment);
-    allWords = [];
-    for (const s of allSentences) {
-        const words = Array.from(wordSegmenter.segment(s))
-            .map(it=>it.segment.trim().toLowerCase())
-            .filter(it=>it.length != 0 && !(it.length == 1 && !/[a-z]/i.test(it)))
-        ;
-        for (const num of consecutive) {
-            if (num == 1) allWords.push(...words.map(it=>it.replace(/'s$/,'')));
-            else {
-                for (let i = 0; i + num <= words.length; i++) {
-                    allWords.push(words.slice(i, i + num).join(' '));
+    allMessages = [];
+    chat.forEach((mes,idx)=>{
+        if (mes.is_system || mes.is_user) return;
+        const item = {
+            id: idx,
+            text: mes.mes
+                // remove codeblocks
+                .split('```').filter((_,idx)=>idx % 2 == 0).join('')
+                // remove contractions at end of words ("Alice's" -> "Alice")
+                .replace(/('s|'d|'ve|n't)\b/g, '')
+            ,
+            words: [],
+        };
+        allMessages.push(item);
+        const allSentences = Array.from(sentenceSegmenter.segment(item.text)).map(it=>it.segment);
+        for (const s of allSentences) {
+            const words = Array.from(wordSegmenter.segment(s))
+                .filter(it=>it.isWordLike)
+                .map(it=>it.segment.trim().toLowerCase())
+            ;
+            for (const num of consecutive) {
+                if (num == 1) item.words.push(...words);
+                else {
+                    for (let i = 0; i + num <= words.length; i++) {
+                        item.words.push(words.slice(i, i + num).join(' '));
+                    }
                 }
             }
         }
-    }
+        allWords.push(...item.words);
+    });
     return allWords;
 };
 const processWords = (allWords)=>{
@@ -124,31 +214,40 @@ const render = (words)=>{
 const updateChart = ()=>{
     domChartContainer.innerHTML = '';
     if (selected.length > 0) {
+        const style = window.getComputedStyle(domChartContainer);
+        console.log('SMART_THEME_BODY_COLOR', style.getPropertyValue('--SmartThemeBodyColor'));
+        Chart.defaults.borderColor = style.getPropertyValue('--SmartThemeBorderColor');
+        Chart.defaults.color = style.getPropertyValue('--SmartThemeEmColor');
+        colors[0] = style.getPropertyValue('--SmartThemeQuoteColor');
         const canvas = document.createElement('canvas');
         canvas.classList.add('stwf--chartCanvas');
         domChartContainer.append(canvas);
         const dataSets = [];
         for (const word of selected) {
+            const first = allMessages.findIndex(it=>it.words.includes(word)) + movingAverage;
+            const last = allMessages.findLastIndex(it=>it.words.includes(word));
             const data = [];
-            // let cum = 0;
-            for (let idx = movingAverage; idx < chat.length; idx++) {
-                // const mes = chat[idx];
-                const cum = chat
-                    .slice(movingAverage ? idx - movingAverage : 0, idx)
-                    .map(it=>it.mes.toLowerCase().split(word).length - 1)
+            for (let idx = movingAverage; idx < Math.max(first, movingAverage); idx++) {
+                data.push(null);
+            }
+            for (let idx = Math.max(first, movingAverage); idx < Math.min(last, chat.length); idx++) {
+                const cum = allMessages
+                    .slice(movingAverage ? idx - movingAverage : first, idx + 1)
+                    .map(it=>it.words.filter(w=>w == word).length / (frequencyPerWords ? it.words.length : 1))
                     .reduce((sum,cur)=>sum + cur,0)
                 ;
-                // const count = mes.mes.toLowerCase().split(word).length - 1;
-                // cum += count;
-                data.push(cum / (movingAverage || idx));
+                data.push(cum / (movingAverage || idx - (first - 1)));
             }
-            chat.forEach((mes,idx)=>{
-            });
+            for (let idx = Math.min(last, chat.length); idx < chat.length; idx++) {
+                data.push(null);
+            }
             dataSets.push({
                 label: word,
                 data,
                 fill: false,
                 borderColor: colors[dataSets.length % colors.length],
+                tension: 0.2,
+                pointRadius: 0,
             });
         }
         const chart = new Chart(canvas, {
@@ -217,14 +316,18 @@ registerSlashCommand('wordfrequency-consecutive',
     true,
     true,
 );
+const setMovingAverage = (value)=>{
+    if (!extension_settings.wordFrequency) extension_settings.wordFrequency = {};
+    if (movingAverageInput) movingAverageInput.value = value;
+    extension_settings.wordFrequency.movingAverage = Number(value.trim());
+    movingAverage = extension_settings.wordFrequency.movingAverage;
+    saveSettingsDebounced();
+    updateChart();
+};
 registerSlashCommand('wordfrequency-movingaverage',
     (args, value)=>{
         if (value?.trim()) {
-            if (!extension_settings.wordFrequency) extension_settings.wordFrequency = {};
-            extension_settings.wordFrequency.movingAverage = Number(value.trim());
-            movingAverage = extension_settings.wordFrequency.movingAverage;
-            saveSettingsDebounced();
-            updateChart();
+            setMovingAverage(value);
         } else {
             return JSON.stringify(movingAverage);
         }
@@ -273,3 +376,12 @@ registerSlashCommand('wordfrequency-select',
     true,
     true,
 );
+
+const setFrequencyPerWords = (value)=>{
+    if (!extension_settings.wordFrequency) extension_settings.wordFrequency = {};
+    if (frequencyPerWordsInput) frequencyPerWordsInput.checked = Boolean(value);
+    extension_settings.wordFrequency.frequencyPerWords = Boolean(value);
+    frequencyPerWords = extension_settings.wordFrequency.frequencyPerWords;
+    saveSettingsDebounced();
+    updateChart();
+};

@@ -11,9 +11,35 @@ body #stwf--root {
 	display: flex;
 	flex-direction: column;
 
+	> .stwf--actions {
+		display: flex;
+		justify-content: flex-end;
+		align-items: baseline;
+		gap: 1em;
+		> .stwf--controls {
+			display: flex;
+			justify-content: flex-end;
+			align-items: baseline;
+			gap: 1em;
+			font-size: x-small;
+			> label {
+				display: flex;
+				white-space: nowrap;
+				align-items: baseline;
+				gap: 0.5em;
+				input[type="number"] {
+					width: 5em;
+					height: auto;
+					padding: 1px;
+					font-size: inherit;
+				}
+			}
+		}
+	}
+
 	> .stwf--chart {
 		flex: 0 0 auto;
-		background-color: whitesmoke;
+		/* background-color: whitesmoke; */
 	}
 
 	> .stwf--list {
@@ -29,6 +55,18 @@ body #stwf--root {
 			&:hover {
 				opacity: 1;
 			}
+		}
+	}
+}
+
+.stwf--common {
+	text-align: left;
+	> .stwf--item {
+		cursor: pointer;
+		opacity: 0.75;
+		transition: 200ms;
+		&:hover {
+			opacity: 1;
 		}
 	}
 }
