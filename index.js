@@ -173,13 +173,12 @@ const processWords = (allWords)=>{
     words = Object.keys(dict).map(w=>({ word:w, count:dict[w] }));
     words.sort((a,b)=>b.count - a.count);
     words = words.filter(it=>it.word.length >= 3);
-    words = words.slice(0, 100);
     return words;
 };
 const render = (words)=>{
     domList.innerHTML = '';
     let max;
-    for (const word of words) {
+    for (const word of words.filter((it,idx)=>idx < 100 || selected.includes(it))) {
         if (!max) max = word.count;
         const item = document.createElement('div'); {
             item.classList.add('stwf--item');
