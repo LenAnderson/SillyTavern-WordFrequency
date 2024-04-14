@@ -248,6 +248,7 @@ const updateChart = ()=>{
                 borderColor: colors[dataSets.length % colors.length],
                 tension: 0.2,
                 pointRadius: 0,
+                borderWidth: 1,
             });
         }
         const chart = new Chart(canvas, {
